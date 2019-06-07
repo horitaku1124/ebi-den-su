@@ -1,8 +1,6 @@
-class Ebi {
-    companion object {
-        @JvmStatic
-        fun main(args: Array<String>) {
-            println("OK")
-        }
+object Ebi {
+    @JvmStatic
+    fun main(args: Array<String>) {
+        println("OK")
     }
 }
