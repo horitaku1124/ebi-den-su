@@ -7,6 +7,7 @@ class TestCase1 {
     @Test
     fun test1() {
         val a = 1 + 1
+        println("a=${a}")
         assertSame(a, 2)
     }
 }

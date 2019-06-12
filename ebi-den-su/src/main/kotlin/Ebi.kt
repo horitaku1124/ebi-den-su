@@ -1,4 +1,3 @@
-import org.apache.poi.ss.usermodel.Cell
 import org.apache.poi.ss.usermodel.WorkbookFactory
 import java.io.FileInputStream
 
@@ -14,13 +13,26 @@ object Ebi {
         var testCaseSheet = workbook.getSheet("テストケース")!!
 
 
-        var row = testCaseSheet.rowIterator().next()
-        var headerCells = arrayListOf<Cell>()
-        for (cell in row.cellIterator()) {
-            headerCells.add(cell)
+        var rows = testCaseSheet.rowIterator()
+        var headerRow = rows.next()
+        var index = 0
+        var headerMaps = hashMapOf<String, Int>()
+        for (cell in headerRow.cellIterator()) {
+            headerMaps.put(cell.stringCellValue, index)
+            index += 1
         }
+        println(headerMaps)
 
-        println(headerCells)
+        for (row in rows) {
+            var className = row.getCell(headerMaps["クラス"]!!).stringCellValue!!
+            var methodName = row.getCell(headerMaps["メソッド"]!!).stringCellValue!!
+            println(className)
+            println(methodName)
+            val clazz = Class.forName(className)
+            var instance = clazz.getConstructor().newInstance()
 
+            var method = clazz.getDeclaredMethod(methodName)
+            method.invoke(instance)
+        }
     }
 }
