@@ -7,6 +7,8 @@ import java.io.FileInputStream
 import org.junit.runners.Parameterized
 import util.EbiMenu
 import util.TestResult
+import java.io.File
+import java.io.OutputStream
 import java.lang.Exception
 import java.lang.reflect.Constructor
 import java.lang.reflect.Method
@@ -35,6 +37,34 @@ object Ebi {
 
         var tests = studyRecipe(headerMaps, rows)
         var allTestResults = cookAllTests(tests)
+        println(allTestResults)
+
+        rows = testCaseSheet.rowIterator()
+        rows.next()
+        for (row in rows) {
+            var className = row.getCell(headerMaps["クラス"]!!).stringCellValue!!
+            var methodName = row.getCell(headerMaps["メソッド"]!!).stringCellValue!!
+            println(className)
+            println(methodName)
+
+            if (allTestResults.containsKey(className) && allTestResults[className]!!.containsKey(methodName)) {
+                var tests = allTestResults[className]!![methodName]!!
+                var passed = tests.stream().allMatch{ t -> t.status ==  TestResult.STATUS.COMPLETED}
+
+                var cellIndex = headerMaps["テスト結果"]!!
+                var cell = row.getCell(cellIndex)
+                if (cell == null) {
+                    cell = row.createCell(cellIndex)
+                }
+                cell.setCellValue(
+                    if (passed) "OK" else "NG"
+                )
+            } else {
+                println("no test")
+            }
+        }
+        workbook.write(File("a.xlsx").outputStream())
+
     }
 
     private fun studyRecipe(headerMaps: HashMap<String, Int>, rows: Iterator<Row>): HashMap<String, EbiMenu> {
@@ -59,8 +89,8 @@ object Ebi {
         return tests
     }
 
-    private fun cookAllTests(tests: HashMap<String, EbiMenu>): ArrayList<TestResult> {
-        var allTestResults = arrayListOf<TestResult>()
+    private fun cookAllTests(tests: HashMap<String, EbiMenu>): HashMap<String, HashMap<String, List<TestResult>>> {
+        var allTestResults = hashMapOf<String, HashMap<String, List<TestResult>>>()
         for (className  in tests.keys) {
             val recipe = tests[className]!!
 
@@ -104,7 +134,6 @@ object Ebi {
                 }
             }
 
-
             var constructor: Constructor<out Any>
             if (runWithAnnotation == null) {
                 constructor = clazz.getConstructor()
@@ -122,14 +151,24 @@ object Ebi {
                         instances.add(constructor.newInstance(param[0] as String))
                     }
                 }
+                var methodResuls = arrayListOf<TestResult>()
                 for (instance in instances) {
                     var testResult = runTestCase(instance, recipe, method)
-                    allTestResults.add(testResult)
+                    methodResuls.add(testResult)
                 }
+                var methodTest: HashMap<String, List<TestResult>>
+                if (allTestResults.containsKey(className)) {
+                    methodTest = allTestResults[className]!!
+                } else {
+                    methodTest = hashMapOf()
+                    allTestResults[className] = methodTest
+                }
+                methodTest[methodName] = methodResuls
             }
         }
         return allTestResults
     }
+
     private fun runTestCase(ingredient: Any, recipe: EbiMenu, method: Method): TestResult {
         var result = TestResult()
         try {
@@ -154,6 +193,7 @@ object Ebi {
             if (recipe.afterMethod != null) {
                 recipe.afterMethod!!.invoke(ingredient)
             }
+            result.status = TestResult.STATUS.COMPLETED
         } catch (e: Exception) {
             e.printStackTrace()
             result.status = TestResult.STATUS.FAILED
