@@ -1,3 +1,4 @@
+import org.apache.poi.ss.usermodel.Row
 import org.apache.poi.ss.usermodel.WorkbookFactory
 import org.junit.After
 import org.junit.Before
@@ -5,6 +6,8 @@ import org.junit.runner.RunWith
 import java.io.FileInputStream
 import org.junit.runners.Parameterized
 import util.EbiMenu
+import util.TestResult
+import java.lang.Exception
 import java.lang.reflect.Constructor
 import java.lang.reflect.Method
 
@@ -30,6 +33,11 @@ object Ebi {
         }
         println(headerMaps)
 
+        var tests = studyRecipe(headerMaps, rows)
+        var allTestResults = cookAllTests(tests)
+    }
+
+    private fun studyRecipe(headerMaps: HashMap<String, Int>, rows: Iterator<Row>): HashMap<String, EbiMenu> {
         var tests = hashMapOf<String, EbiMenu>()
         for (row in rows) {
             var className = row.getCell(headerMaps["クラス"]!!).stringCellValue!!
@@ -48,12 +56,16 @@ object Ebi {
             meal.methods.add(methodName)
 
         }
+        return tests
+    }
+
+    private fun cookAllTests(tests: HashMap<String, EbiMenu>): ArrayList<TestResult> {
+        var allTestResults = arrayListOf<TestResult>()
         for (className  in tests.keys) {
-            var meal = tests[className]!!
+            val recipe = tests[className]!!
 
             val clazz = Class.forName(className)
             var runWithAnnotation: RunWith? = null
-            var parameterizedParametes: Parameterized.Parameters? = null
             var parameters: Iterable<Array<Any>>? = null
             for (anno in clazz.annotations) {
                 if (anno is RunWith) {
@@ -79,16 +91,14 @@ object Ebi {
                 }
             }
 
-            var beforeMethod: Method? = null
-            var afterMethod: Method? = null
             for (method in clazz.methods) {
                 for (anno in method.annotations) {
                     if (anno is Before) {
-                        beforeMethod = method
+                        recipe.beforeMethod = method
                         break
                     }
                     if (anno is After) {
-                        afterMethod = method
+                        recipe.afterMethod = method
                         break
                     }
                 }
@@ -102,32 +112,53 @@ object Ebi {
                 constructor = clazz.getConstructor(String::class.java)
             }
 
-            for (methodName in meal.methods) {
+            for (methodName in recipe.methods) {
                 var method = clazz.getDeclaredMethod(methodName)
-                var instance: Any
+                var instances = arrayListOf<Any>()
                 if (runWithAnnotation == null) {
-                    instance = constructor.newInstance()
-                    if (beforeMethod != null) {
-                        beforeMethod.invoke(instance)
-                    }
-                    method.invoke(instance)
-                    if (afterMethod != null) {
-                        afterMethod.invoke(instance)
-                    }
+                    instances.add(constructor.newInstance())
                 } else {
                     for (param in parameters!!) {
-                        var browser = param[0] as String
-                        instance = constructor.newInstance(browser)
-                        if (beforeMethod != null) {
-                            beforeMethod.invoke(instance)
-                        }
-                        method.invoke(instance)
-                        if (afterMethod != null) {
-                            afterMethod.invoke(instance)
-                        }
+                        instances.add(constructor.newInstance(param[0] as String))
                     }
+                }
+                for (instance in instances) {
+                    var testResult = runTestCase(instance, recipe, method)
+                    allTestResults.add(testResult)
                 }
             }
         }
+        return allTestResults
+    }
+    private fun runTestCase(ingredient: Any, recipe: EbiMenu, method: Method): TestResult {
+        var result = TestResult()
+        try {
+            if (recipe.beforeMethod != null) {
+                recipe.beforeMethod!!.invoke(ingredient)
+            }
+        } catch (e: Exception) {
+            result.status = TestResult.STATUS.FAILED
+            result.error = e
+            e.printStackTrace()
+        }
+        if (result.status == TestResult.STATUS.YET) {
+            try {
+                method.invoke(ingredient)
+            } catch (e: Exception) {
+                e.printStackTrace()
+                result.status = TestResult.STATUS.FAILED
+                result.error = e
+            }
+        }
+        try {
+            if (recipe.afterMethod != null) {
+                recipe.afterMethod!!.invoke(ingredient)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            result.status = TestResult.STATUS.FAILED
+            result.error = e
+        }
+        return result
     }
 }
