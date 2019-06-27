@@ -8,10 +8,22 @@ import org.junit.runners.Parameterized
 import util.EbiMenu
 import util.TestResult
 import java.io.File
-import java.io.OutputStream
 import java.lang.Exception
 import java.lang.reflect.Constructor
 import java.lang.reflect.Method
+import org.apache.velocity.VelocityContext;
+import org.apache.velocity.Template;
+import org.apache.velocity.app.Velocity;
+import org.apache.velocity.exception.ResourceNotFoundException;
+import org.apache.velocity.exception.ParseErrorException;
+import org.apache.velocity.exception.MethodInvocationException;
+import util.TestReview
+import java.io.StringWriter
+import java.util.Properties
+
+
+
+
 
 object Ebi {
     @JvmStatic
@@ -41,6 +53,8 @@ object Ebi {
 
         rows = testCaseSheet.rowIterator()
         rows.next()
+
+        var testResultForHtml = arrayListOf<TestReview>()
         for (row in rows) {
             var className = row.getCell(headerMaps["クラス"]!!).stringCellValue!!
             var methodName = row.getCell(headerMaps["メソッド"]!!).stringCellValue!!
@@ -59,21 +73,45 @@ object Ebi {
                 cell.setCellValue(
                     if (passed) "OK" else "NG"
                 )
+
+                var res = TestReview()
+                res.result = if (passed) TestReview.RESULT.OK else TestReview.RESULT.NG
+                res.className = className
+                res.methodName = methodName
+                testResultForHtml.add(res)
             } else {
                 println("no test")
             }
         }
         workbook.write(File("a.xlsx").outputStream())
 
+
+        val p = Properties()
+        p.setProperty("file.resource.loader.path", "./src/main/resources")
+        Velocity.init(p)
+        val context = VelocityContext()
+        context.put("tests", "Velocity")
+        context.put("results", testResultForHtml)
+        var template: Template? = null
+        template = Velocity.getTemplate("mytemplate.vm");
+        val sw = StringWriter()
+        template.merge(context, sw)
+        println(sw.toString())
     }
 
     private fun studyRecipe(headerMaps: HashMap<String, Int>, rows: Iterator<Row>): HashMap<String, EbiMenu> {
         var tests = hashMapOf<String, EbiMenu>()
         for (row in rows) {
+            var testNodeStr = row.getCell(headerMaps["テストNO"]!!)
             var className = row.getCell(headerMaps["クラス"]!!).stringCellValue!!
             var methodName = row.getCell(headerMaps["メソッド"]!!).stringCellValue!!
-            println(className)
-            println(methodName)
+
+
+            if (testNodeStr == null) {
+                continue
+            }
+            var testNo = testNodeStr.numericCellValue
+            println("${testNo} - " + className + "#" + methodName)
 
             var meal: EbiMenu
             if (tests.containsKey(className)) {
