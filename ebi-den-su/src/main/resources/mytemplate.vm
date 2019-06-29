@@ -11,9 +11,9 @@
 
 <table>
     <tr>
-        <th>A</th>
-        <th>B</th>
-        <th>C</th>
+        <th>ClassName</th>
+        <th>MethodName</th>
+        <th>Result</th>
     </tr>
 
     #foreach($row in $results)

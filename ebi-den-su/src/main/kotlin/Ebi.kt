@@ -1,37 +1,42 @@
 import org.apache.poi.ss.usermodel.Row
 import org.apache.poi.ss.usermodel.WorkbookFactory
+import org.apache.velocity.Template
+import org.apache.velocity.VelocityContext
+import org.apache.velocity.app.Velocity
 import org.junit.After
 import org.junit.Before
 import org.junit.runner.RunWith
-import java.io.FileInputStream
 import org.junit.runners.Parameterized
 import util.EbiMenu
 import util.TestResult
+import util.TestReview
 import java.io.File
-import java.lang.Exception
+import java.io.FileInputStream
+import java.io.StringWriter
 import java.lang.reflect.Constructor
 import java.lang.reflect.Method
-import org.apache.velocity.VelocityContext;
-import org.apache.velocity.Template;
-import org.apache.velocity.app.Velocity;
-import org.apache.velocity.exception.ResourceNotFoundException;
-import org.apache.velocity.exception.ParseErrorException;
-import org.apache.velocity.exception.MethodInvocationException;
-import util.TestReview
-import java.io.StringWriter
-import java.util.Properties
-
-
-
+import java.util.*
 
 
 object Ebi {
+    private fun getVelocity(): VelocityContext {
+        val p = Properties()
+        p.setProperty("file.resource.loader.path", "./src/main/resources")
+        Velocity.init(p)
+        return VelocityContext()
+    }
+
     @JvmStatic
     fun main(args: Array<String>) {
         val inputFile = args[0]
         val workbook = WorkbookFactory.create(FileInputStream(inputFile))
         for (sheet in workbook.sheetIterator()) {
             println(sheet.sheetName)
+        }
+        var resultDir = File("./out/test-result")
+        resultDir.mkdirs()
+        if (!resultDir.exists()) {
+            throw RuntimeException("failed to create dir")
         }
 
         var testCaseSheet = workbook.getSheet("テストケース")!!
@@ -83,20 +88,19 @@ object Ebi {
                 println("no test")
             }
         }
-        workbook.write(File("a.xlsx").outputStream())
+        workbook.write(File(resultDir, "テスト結果.xlsx").outputStream())
 
-
-        val p = Properties()
-        p.setProperty("file.resource.loader.path", "./src/main/resources")
-        Velocity.init(p)
-        val context = VelocityContext()
-        context.put("tests", "Velocity")
+        val context = getVelocity()
         context.put("results", testResultForHtml)
-        var template: Template? = null
-        template = Velocity.getTemplate("mytemplate.vm");
+        var template: Template = Velocity.getTemplate("mytemplate.vm");
         val sw = StringWriter()
         template.merge(context, sw)
-        println(sw.toString())
+
+        File(resultDir, "index.html").bufferedWriter().use { writer ->
+            writer.write(sw.toString())
+        }
+
+        println("Test completed")
     }
 
     private fun studyRecipe(headerMaps: HashMap<String, Int>, rows: Iterator<Row>): HashMap<String, EbiMenu> {
@@ -122,7 +126,6 @@ object Ebi {
             }
 
             meal.methods.add(methodName)
-
         }
         return tests
     }
