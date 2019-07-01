@@ -11,15 +11,21 @@
 
 <table>
     <tr>
+        <th>TestTarget</th>
+        <th>TestOverall</th>
         <th>ClassName</th>
         <th>MethodName</th>
+        <th>checkPoint</th>
         <th>Result</th>
     </tr>
 
     #foreach($row in $results)
         <tr>
+            <td>$row.testTarget</td>
+            <td>$row.testOverall</td>
             <td>$row.className</td>
             <td>$row.methodName</td>
+            <td style="white-space: pre;">$row.checkPoint</td>
             <td>$row.result</td>
         </tr>
     #end

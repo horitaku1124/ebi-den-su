@@ -15,10 +15,14 @@ import java.io.FileInputStream
 import java.io.StringWriter
 import java.lang.reflect.Constructor
 import java.lang.reflect.Method
+import java.time.LocalDateTime
 import java.util.*
 
 
 object Ebi {
+    /**
+     * http://velocity.apache.org/engine/2.0/developer-guide.html
+     */
     private fun getVelocity(): VelocityContext {
         val p = Properties()
         p.setProperty("file.resource.loader.path", "./src/main/resources")
@@ -61,8 +65,12 @@ object Ebi {
 
         var testResultForHtml = arrayListOf<TestReview>()
         for (row in rows) {
+            var testTarget = headerMaps["テスト項目"]!!.let{ if (row.getCell(it) == null ) "" else row.getCell(it)!!.stringCellValue}
+            var testOverall = headerMaps["テスト概要"]!!.let{ if (row.getCell(it) == null ) "" else row.getCell(it)!!.stringCellValue}
+
             var className = row.getCell(headerMaps["クラス"]!!).stringCellValue!!
             var methodName = row.getCell(headerMaps["メソッド"]!!).stringCellValue!!
+            var checkPoint = headerMaps["検証項目"]!!.let{ if (row.getCell(it) == null ) "" else row.getCell(it)!!.stringCellValue}
             println(className)
             println(methodName)
 
@@ -70,19 +78,27 @@ object Ebi {
                 var tests = allTestResults[className]!![methodName]!!
                 var passed = tests.stream().allMatch{ t -> t.status ==  TestResult.STATUS.COMPLETED}
 
-                var cellIndex = headerMaps["テスト結果"]!!
-                var cell = row.getCell(cellIndex)
-                if (cell == null) {
-                    cell = row.createCell(cellIndex)
+
+                headerMaps["テスト結果"]!!.also {
+                    var cell = row.getCell(it) ?: row.createCell(it)
+                    cell.setCellValue(
+                        if (passed) "OK" else "NG"
+                    )
                 }
-                cell.setCellValue(
-                    if (passed) "OK" else "NG"
-                )
+                headerMaps["実施日"]!!.also {
+                    var cell = row.getCell(it) ?: row.createCell(it)
+                    cell.setCellValue(
+                        tests[0].startedAt.toString()
+                    )
+                }
 
                 var res = TestReview()
                 res.result = if (passed) TestReview.RESULT.OK else TestReview.RESULT.NG
                 res.className = className
                 res.methodName = methodName
+                res.checkPoint = checkPoint
+                res.testTarget = testTarget
+                res.testOverall = testOverall
                 testResultForHtml.add(res)
             } else {
                 println("no test")
@@ -104,17 +120,16 @@ object Ebi {
     }
 
     private fun studyRecipe(headerMaps: HashMap<String, Int>, rows: Iterator<Row>): HashMap<String, EbiMenu> {
-        var tests = hashMapOf<String, EbiMenu>()
+        val tests = hashMapOf<String, EbiMenu>()
         for (row in rows) {
-            var testNodeStr = row.getCell(headerMaps["テストNO"]!!)
-            var className = row.getCell(headerMaps["クラス"]!!).stringCellValue!!
-            var methodName = row.getCell(headerMaps["メソッド"]!!).stringCellValue!!
-
+            val testNodeStr = row.getCell(headerMaps["テストNO"]!!)
+            val className = row.getCell(headerMaps["クラス"]!!).stringCellValue!!
+            val methodName = row.getCell(headerMaps["メソッド"]!!).stringCellValue!!
 
             if (testNodeStr == null) {
                 continue
             }
-            var testNo = testNodeStr.numericCellValue
+            val testNo = testNodeStr.numericCellValue
             println("${testNo} - " + className + "#" + methodName)
 
             var meal: EbiMenu
@@ -212,6 +227,7 @@ object Ebi {
 
     private fun runTestCase(ingredient: Any, recipe: EbiMenu, method: Method): TestResult {
         var result = TestResult()
+        result.startedAt = LocalDateTime.now()
         try {
             if (recipe.beforeMethod != null) {
                 recipe.beforeMethod!!.invoke(ingredient)
@@ -240,6 +256,7 @@ object Ebi {
             result.status = TestResult.STATUS.FAILED
             result.error = e
         }
+        result.endedAt = LocalDateTime.now()
         return result
     }
 }

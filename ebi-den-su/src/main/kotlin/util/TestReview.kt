@@ -6,6 +6,9 @@ class TestReview {
     }
 
     var result: RESULT = RESULT.NG
-    var className: String? = null
-    var methodName: String? = null
+    var className: String = ""
+    var methodName: String = ""
+    var checkPoint: String = ""
+    var testTarget: String = ""
+    var testOverall: String = ""
 }
