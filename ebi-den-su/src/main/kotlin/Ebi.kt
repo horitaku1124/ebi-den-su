@@ -17,9 +17,14 @@ import java.lang.reflect.Constructor
 import java.lang.reflect.Method
 import java.time.LocalDateTime
 import java.util.*
+import java.time.format.DateTimeFormatter
+
+
 
 
 object Ebi {
+    var formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
+
     /**
      * http://velocity.apache.org/engine/2.0/developer-guide.html
      */
@@ -58,18 +63,24 @@ object Ebi {
 
         var tests = studyRecipe(headerMaps, rows)
         var allTestResults = cookAllTests(tests)
-        println(allTestResults)
 
         rows = testCaseSheet.rowIterator()
         rows.next()
 
         var testResultForHtml = arrayListOf<TestReview>()
-        for (row in rows) {
-            var testTarget = headerMaps["テスト項目"]!!.let{ if (row.getCell(it) == null ) "" else row.getCell(it)!!.stringCellValue}
-            var testOverall = headerMaps["テスト概要"]!!.let{ if (row.getCell(it) == null ) "" else row.getCell(it)!!.stringCellValue}
 
-            var className = row.getCell(headerMaps["クラス"]!!).stringCellValue!!
-            var methodName = row.getCell(headerMaps["メソッド"]!!).stringCellValue!!
+        var lastResult = ""
+        var lastStartedAt = ""
+        for (row in rows) {
+            val testNodeStr = row.getCell(headerMaps["テストNO"]!!)
+            if (testNodeStr == null) {
+                continue
+            }
+            var verifyTarget = headerMaps["テスト項目"]!!.let{ if (row.getCell(it) == null ) "" else row.getCell(it)!!.stringCellValue}
+            var verifyOverall = headerMaps["テスト概要"]!!.let{ if (row.getCell(it) == null ) "" else row.getCell(it)!!.stringCellValue}
+
+            var className = row.getCell(headerMaps["クラス"]!!).let{ if (it ==  null) "" else it.stringCellValue!!}
+            var methodName = row.getCell(headerMaps["メソッド"]!!).let{ if (it ==  null) "" else it.stringCellValue!!}
             var checkPoint = headerMaps["検証項目"]!!.let{ if (row.getCell(it) == null ) "" else row.getCell(it)!!.stringCellValue}
             println(className)
             println(methodName)
@@ -77,38 +88,35 @@ object Ebi {
             if (allTestResults.containsKey(className) && allTestResults[className]!!.containsKey(methodName)) {
                 var tests = allTestResults[className]!![methodName]!!
                 var passed = tests.stream().allMatch{ t -> t.status ==  TestResult.STATUS.COMPLETED}
-
-
-                headerMaps["テスト結果"]!!.also {
-                    var cell = row.getCell(it) ?: row.createCell(it)
-                    cell.setCellValue(
-                        if (passed) "OK" else "NG"
-                    )
-                }
-                headerMaps["実施日"]!!.also {
-                    var cell = row.getCell(it) ?: row.createCell(it)
-                    cell.setCellValue(
-                        tests[0].startedAt.toString()
-                    )
-                }
+                lastResult = if (passed) "OK" else "NG"
+                lastStartedAt = tests[0].startedAt!!.format(formatter)
 
                 var res = TestReview()
                 res.result = if (passed) TestReview.RESULT.OK else TestReview.RESULT.NG
                 res.className = className
                 res.methodName = methodName
                 res.checkPoint = checkPoint
-                res.testTarget = testTarget
-                res.testOverall = testOverall
+                res.testTarget = verifyTarget
+                res.testOverall = verifyOverall
                 testResultForHtml.add(res)
             } else {
                 println("no test")
+            }
+
+            headerMaps["テスト結果"]!!.also {
+                var cell = row.getCell(it) ?: row.createCell(it)
+                cell.setCellValue(lastResult)
+            }
+            headerMaps["実施日"]!!.also {
+                var cell = row.getCell(it) ?: row.createCell(it)
+                cell.setCellValue(lastStartedAt)
             }
         }
         workbook.write(File(resultDir, "テスト結果.xlsx").outputStream())
 
         val context = getVelocity()
         context.put("results", testResultForHtml)
-        var template: Template = Velocity.getTemplate("mytemplate.vm");
+        var template: Template = Velocity.getTemplate("top.vm");
         val sw = StringWriter()
         template.merge(context, sw)
 
@@ -121,16 +129,18 @@ object Ebi {
 
     private fun studyRecipe(headerMaps: HashMap<String, Int>, rows: Iterator<Row>): HashMap<String, EbiMenu> {
         val tests = hashMapOf<String, EbiMenu>()
+        var lastClassName: String? = null
+        var lastMethodName: String? = null
         for (row in rows) {
             val testNodeStr = row.getCell(headerMaps["テストNO"]!!)
-            val className = row.getCell(headerMaps["クラス"]!!).stringCellValue!!
-            val methodName = row.getCell(headerMaps["メソッド"]!!).stringCellValue!!
+            val className = row.getCell(headerMaps["クラス"]!!).let { if (it == null) lastClassName else it.stringCellValue!! }
+            val methodName = row.getCell(headerMaps["メソッド"]!!).let { if (it == null) lastMethodName else it.stringCellValue!! }
 
-            if (testNodeStr == null) {
+            if (testNodeStr == null || className == null || methodName == null) {
                 continue
             }
-            val testNo = testNodeStr.numericCellValue
-            println("${testNo} - " + className + "#" + methodName)
+            val testNo = testNodeStr.numericCellValue.toInt()
+            println("No ${testNo} - " + className + "#" + methodName)
 
             var meal: EbiMenu
             if (tests.containsKey(className)) {
@@ -141,6 +151,8 @@ object Ebi {
             }
 
             meal.methods.add(methodName)
+            lastClassName = className
+            lastMethodName = methodName
         }
         return tests
     }
