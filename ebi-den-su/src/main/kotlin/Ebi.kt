@@ -70,6 +70,7 @@ object Ebi {
         var testResultForHtml = arrayListOf<TestReview>()
 
         var lastResult = ""
+        var lastResultEnum = TestReview.RESULT.NG
         var lastStartedAt = ""
         for (row in rows) {
             val testNodeStr = row.getCell(headerMaps["テストNO"]!!)
@@ -82,8 +83,8 @@ object Ebi {
             var className = row.getCell(headerMaps["クラス"]!!).let{ if (it ==  null) "" else it.stringCellValue!!}
             var methodName = row.getCell(headerMaps["メソッド"]!!).let{ if (it ==  null) "" else it.stringCellValue!!}
             var checkPoint = headerMaps["検証項目"]!!.let{ if (row.getCell(it) == null ) "" else row.getCell(it)!!.stringCellValue}
-            println(className)
-            println(methodName)
+//            println(className)
+//            println(methodName)
 
             if (allTestResults.containsKey(className) && allTestResults[className]!!.containsKey(methodName)) {
                 var tests = allTestResults[className]!![methodName]!!
@@ -92,7 +93,8 @@ object Ebi {
                 lastStartedAt = tests[0].startedAt!!.format(formatter)
 
                 var res = TestReview()
-                res.result = if (passed) TestReview.RESULT.OK else TestReview.RESULT.NG
+                lastResultEnum = if (passed) TestReview.RESULT.OK else TestReview.RESULT.NG
+                res.result = lastResultEnum
                 res.className = className
                 res.methodName = methodName
                 res.checkPoint = checkPoint
@@ -101,6 +103,14 @@ object Ebi {
                 testResultForHtml.add(res)
             } else {
                 println("no test")
+                var res = TestReview()
+                res.result = lastResultEnum
+                res.className = className
+                res.methodName = methodName
+                res.checkPoint = checkPoint
+                res.testTarget = verifyTarget
+                res.testOverall = verifyOverall
+                testResultForHtml.add(res)
             }
 
             headerMaps["テスト結果"]!!.also {
@@ -114,14 +124,27 @@ object Ebi {
         }
         workbook.write(File(resultDir, "テスト結果.xlsx").outputStream())
 
-        val context = getVelocity()
-        context.put("results", testResultForHtml)
-        var template: Template = Velocity.getTemplate("top.vm");
-        val sw = StringWriter()
-        template.merge(context, sw)
+        getVelocity().let { velocity ->
+            velocity.put("results", testResultForHtml)
+            var template: Template = Velocity.getTemplate("top.vm")
+            val sw = StringWriter()
+            template.merge(velocity, sw)
 
-        File(resultDir, "index.html").bufferedWriter().use { writer ->
-            writer.write(sw.toString())
+            File(resultDir, "index.html").bufferedWriter().use { writer ->
+                writer.write(sw.toString())
+            }
+        }
+        for (className in allTestResults.keys) {
+            var classTests: HashMap<String, List<TestResult>> = allTestResults[className] ?: continue
+            val context = getVelocity()
+            var template: Template = Velocity.getTemplate("detail.vm");
+
+            for (methodName in classTests.keys) {
+
+            }
+            context.put("results", testResultForHtml)
+            val sw = StringWriter()
+            template.merge(context, sw)
         }
 
         println("Test completed")
@@ -139,8 +162,8 @@ object Ebi {
             if (testNodeStr == null || className == null || methodName == null) {
                 continue
             }
-            val testNo = testNodeStr.numericCellValue.toInt()
-            println("No ${testNo} - " + className + "#" + methodName)
+//            val testNo = testNodeStr.numericCellValue.toInt()
+//            println("No ${testNo} - " + className + "#" + methodName)
 
             var meal: EbiMenu
             if (tests.containsKey(className)) {
@@ -149,10 +172,11 @@ object Ebi {
                 meal = EbiMenu(className)
                 tests[className] = meal
             }
-
-            meal.methods.add(methodName)
-            lastClassName = className
-            lastMethodName = methodName
+            if (!meal.methods.contains(methodName)) {
+                meal.methods.add(methodName)
+                lastClassName = className
+                lastMethodName = methodName
+            }
         }
         return tests
     }
